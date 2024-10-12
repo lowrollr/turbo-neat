@@ -1,15 +1,17 @@
+import concurrent.futures
 from functools import partial
 from typing import Callable, Dict, Optional, Tuple
 
 import chex
 import jax
 import jax.numpy as jnp
-import wandb
 
+import wandb
 from neat_jax.config import NEATConfig
 from neat_jax.genome import Genome, apply, init_genome
+from neat_jax.logging import log_to_wandb, render_and_log_episode
 from neat_jax.population import Population, _init_population
-from neat_jax.utils import mask_data
+from neat_jax.utils import is_printable, mask_data
 from neat_jax.visualize import visualize_genome_as_nn
 
 FitnessFn = Callable[[chex.PRNGKey, Genome, Dict], chex.Array]
@@ -202,6 +204,9 @@ class NEAT:
         species_stats = population.species_data.get_species_stats(prev_stats=prev_stats)
         best_fitness = float("-inf")
 
+        # this just functions as a logging job queue
+        logger = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
         for g in range(num_generations):
             results = {}
             rng, gen_rng, eval_rng, test_rng = jax.random.split(rng, 4)
@@ -263,6 +268,7 @@ class NEAT:
                     )
 
             # test against baseline and render video
+            render_data = None
             if improved:
                 # create nn visualization
                 visualize_genome_as_nn(
@@ -277,27 +283,44 @@ class NEAT:
                     if self.wandb_run is not None:
                         results["nn"] = wandb.Image("neural_network.png")
                     test_rng, rng = jax.random.split(rng)
-                    test_fitness, data = self.test_baseline(test_rng, population)
+                    test_fitness, render_data = self.test_baseline(test_rng, population)
                     results["fitness_against_baseline"] = test_fitness
-                    if render_fn is not None and data is not None:
-                        rendered = render_fn(data)
-                        if self.wandb_run is not None:
-                            results["rendered"] = rendered
 
             # evolve population
             population = self.evolve(gen_rng, population)
 
-            if self.wandb_run is not None:
-                self.wandb_run.log(prev_stats, step=population.generation)
-                self.wandb_run.log(results, step=population.generation)
-            else:
-                results.update(**species_stats)
-                print({k: f"{v:.2f}" for k, v in results.items()})
+            if (
+                self.wandb_run is not None
+                and render_fn is not None
+                and render_data is not None
+            ):
+                # spin off a thread to render and log because rendering is expensive and i/o bound
+                logger.submit(
+                    render_and_log_episode,
+                    self.wandb_run,
+                    prev_stats,
+                    results,
+                    jax.device_put(render_data, jax.devices("cpu")[0]),
+                    render_fn,
+                    g,
+                )
+            elif self.wandb_run is not None:
+                logger.submit(
+                    log_to_wandb,
+                    self.wandb_run,
+                    prev_stats,
+                    results,
+                    g,
+                )
+
+            results.update(**species_stats)
+            print({k: f"{v:.2f}" for k, v in results.items() if is_printable(v)})
 
             # check if genome needs more space allocated
             if population.batched_genome.is_almost_full().any():
                 population = self.resize_genome(population)
                 print(f"Resized genome to {population.batched_genome.capacity} nodes")
 
+        logger.shutdown(wait=True)
         # return the population when done
         return population

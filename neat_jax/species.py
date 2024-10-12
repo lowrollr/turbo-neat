@@ -63,7 +63,7 @@ class SpeciesData:
         )
 
         sorted_idxs = jnp.argsort(
-            species_data.species_size, kind="stable", descending=True
+            species_data.species_size, stable=True, descending=True
         )
         return species_data.replace(
             species_id=species_data.species_id[sorted_idxs],
@@ -89,7 +89,7 @@ class SpeciesData:
         )
 
         sorted_idxs = jnp.argsort(
-            species_data.species_size, kind="stable", descending=True
+            species_data.species_size, stable=True, descending=True
         )
         return species_data.replace(
             species_id=species_data.species_id[sorted_idxs],

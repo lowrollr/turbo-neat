@@ -27,7 +27,8 @@ def fitness(
 ) -> float:
     task_state = reset_fn(jax.random.split(rng, genome.batch_size))
     state = FitnessState(
-        task_state=task_state, reward=jnp.zeros(genome.batch_size, dtype=jnp.int32)
+        task_state=task_state,
+        reward=jnp.zeros(genome.batch_size, dtype=jnp.float32),
     )
 
     def game_step(state, _):
@@ -69,8 +70,12 @@ def fitness_2p(
         task_state = reset_fn(jax.random.split(rng_init, genome.batch_size))
         state = FitnessState2p(
             task_state=task_state,
-            reward_left=jnp.zeros(genome.batch_size, dtype=jnp.int32),
-            reward_right=jnp.zeros(genome.batch_size, dtype=jnp.int32),
+            reward_left=jnp.zeros(
+                genome.batch_size, dtype=task_state.reward_left.dtype
+            ),
+            reward_right=jnp.zeros(
+                genome.batch_size, dtype=task_state.reward_right.dtype
+            ),
         )
 
         def game_step(_, state):
@@ -117,8 +122,10 @@ def fitness_h2h(
     task_state = reset_fn(jax.random.split(rng, genome_1.batch_size))
     state = FitnessState2p(
         task_state=task_state,
-        reward_left=jnp.zeros(genome_1.batch_size, dtype=jnp.int32),
-        reward_right=jnp.zeros(genome_1.batch_size, dtype=jnp.int32),
+        reward_left=jnp.zeros(genome_1.batch_size, dtype=task_state.reward_left.dtype),
+        reward_right=jnp.zeros(
+            genome_1.batch_size, dtype=task_state.reward_right.dtype
+        ),
     )
 
     def game_step(_, state):

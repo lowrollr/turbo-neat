@@ -52,3 +52,13 @@ def round_to_integers(arr, target_sum):
     adjustment_mask = jnp.arange(arr.shape[0]) < adjustment_needed
     adjusted = rounded.at[indices_to_adjust].add(adjustment_mask)
     return adjusted
+
+
+def is_printable(x):
+    return (
+        isinstance(x, float)
+        or isinstance(x, int)
+        or isinstance(x, str)
+        or isinstance(x, bool)
+        or isinstance(x, jnp.ndarray)
+    )

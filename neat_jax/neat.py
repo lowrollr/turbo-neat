@@ -193,6 +193,7 @@ class NEAT:
         num_generations: int,
         population: Optional[Population] = None,
         render_fn: Optional[Callable] = None,
+        render_async: bool = True,
     ):
         """Run the NEAT algorithm"""
         rng = jax.random.PRNGKey(seed)
@@ -295,23 +296,42 @@ class NEAT:
                 and render_data is not None
             ):
                 # spin off a thread to render and log because rendering is expensive and i/o bound
-                logger.submit(
-                    render_and_log_episode,
-                    self.wandb_run,
-                    prev_stats,
-                    results,
-                    jax.device_put(render_data, jax.devices("cpu")[0]),
-                    render_fn,
-                    g,
-                )
+                with jax.default_device(jax.devices("cpu")[0]):
+                    if render_async:
+                        logger.submit(
+                            render_and_log_episode,
+                            self.wandb_run,
+                            prev_stats,
+                            results,
+                            render_data,
+                            render_fn,
+                            g,
+                        )
+                    else:
+                        render_and_log_episode(
+                            self.wandb_run,
+                            prev_stats,
+                            results,
+                            render_data,
+                            render_fn,
+                            g,
+                        )
             elif self.wandb_run is not None:
-                logger.submit(
-                    log_to_wandb,
-                    self.wandb_run,
-                    prev_stats,
-                    results,
-                    g,
-                )
+                if render_async:
+                    logger.submit(
+                        log_to_wandb,
+                        self.wandb_run,
+                        prev_stats,
+                        results,
+                        g,
+                    )
+                else:
+                    log_to_wandb(
+                        self.wandb_run,
+                        prev_stats,
+                        results,
+                        g,
+                    )
 
             results.update(**species_stats)
             print({k: f"{v:.2f}" for k, v in results.items() if is_printable(v)})
